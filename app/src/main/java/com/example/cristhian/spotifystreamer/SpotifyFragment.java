@@ -2,8 +2,10 @@ package com.example.cristhian.spotifystreamer;
 
 import android.annotation.SuppressLint;
 import android.app.Fragment;
+import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -13,6 +15,12 @@ import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.Toast;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -34,6 +42,8 @@ public class SpotifyFragment extends Fragment {
     private EditText searchArtistField;
 
     private CustomListAdapter customListAdapter;
+
+    private final String LOG_TAG=SpotifyFragment.class.getSimpleName();
 
     public SpotifyFragment() {
     }
@@ -71,6 +81,7 @@ public class SpotifyFragment extends Fragment {
             @Override
             public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
                 Toast.makeText(getActivity(), "You click: " + artists.get(i).name, Toast.LENGTH_SHORT).show();
+                searchTopTracksByArtist(artists.get(i).id);
             }
         });
 
@@ -82,6 +93,74 @@ public class SpotifyFragment extends Fragment {
     public void searchArtist(String artistName) {
         spotifyArtistTask = new SpotifyArtistTask();
         spotifyArtistTask.execute(artistName);
+    }
+
+    public void searchTopTracksByArtist(String artistId){
+        HttpURLConnection urlConnection = null;
+        BufferedReader reader = null;
+
+        // Will contain the raw JSON response as a string.
+        String forecastJsonStr = null;
+
+        try{
+
+            final String FORECAST_BASE_URL = "https://api.spotify.com/v1/artists/" + artistId + "/top-tracks";
+            final String COUNTRY = "country";
+
+            Uri builtUri = Uri.parse(FORECAST_BASE_URL).buildUpon()
+                    .appendQueryParameter(COUNTRY, "ES").build();
+
+            URL url = new URL(builtUri.toString());
+
+            Log.v(LOG_TAG, "Built URI " +  builtUri.toString());
+
+            // Create the request to OpenWeatherMap, and open the connection
+            urlConnection = (HttpURLConnection) url.openConnection();
+            urlConnection.setRequestMethod("GET");
+            urlConnection.connect();
+
+            // Read the input stream into a String
+            InputStream inputStream = urlConnection.getInputStream();
+            StringBuffer buffer = new StringBuffer();
+            if (inputStream == null) {
+                // Nothing to do.
+                forecastJsonStr = null;
+            }
+            reader = new BufferedReader(new InputStreamReader(inputStream));
+
+            String line;
+            while ((line = reader.readLine()) != null) {
+                // Since it's JSON, adding a newline isn't necessary (it won't affect parsing)
+                // But it does make debugging a *lot* easier if you print out the completed
+                // buffer for debugging.
+                buffer.append(line + "\n");
+            }
+
+            if (buffer.length() == 0) {
+                // Stream was empty.  No point in parsing.
+                forecastJsonStr = null;
+            }
+            forecastJsonStr = buffer.toString();
+
+            Log.v(LOG_TAG, "Forecast JSON String: " + forecastJsonStr);
+
+        }catch(Exception e) {
+            Log.e(LOG_TAG, "Error ", e);
+            forecastJsonStr = null;
+        }finally{
+            if (urlConnection != null) {
+                urlConnection.disconnect();
+            }
+            if (reader != null) {
+                try {
+                    reader.close();
+                } catch (final IOException e) {
+                    Log.e(LOG_TAG, "Error closing stream", e);
+                }
+            }
+        }
+
+        //return getWeatherDataFromJson(forecastJsonStr);
     }
 
     public class SpotifyArtistTask extends AsyncTask<String, Void, List<Artist>> {
